@@ -78,10 +78,49 @@ process RUN_MTAG {
         --stream_stdout \
         --force
     """
-
 }
 
+// ----------------------
+// FILTER GWAS process
+// ----------------------
+process FILTER_GWS {
+    tag { trait }
 
+    input:
+    path mtag_dir, emit: mtag_output_dir
+    val trait
+
+    output:
+    path "*.GWS.txt"
+    path "*.GWS.clump.tsv"
+
+    publishDir "${params.outdir}/${trait}_MTAG", mode: 'copy'
+
+    script:
+    """
+    # Find the formatted file (assume convention: <trait>_phenotype_formatted.txt)
+    mtagfile=\$(find \${mtag_dir} -name "*_phenotype_formatted.txt" | head -n1)
+    if [[ -f "\$mtagfile" ]]; then
+        bin/filter_gwas_gws.py \$mtagfile --out_prefix \${trait}
+    else
+        echo "ERROR: No *_phenotype_formatted.txt file found in \${mtag_dir}" >&2
+        exit 1
+    fi
+    """
+}
+
+// ----------------------
+// Workflow definition
+// ----------------------
 workflow {
+    // Run MTAG for each pair
     RUN_MTAG(pairwise_inputs)
+
+    // Filter significant loci for each MTAG output
+    // Passes "mtag_output" dir and trait to the filter process
+    pairwise_inputs
+        .map { infl, brain, trait, outdir -> [file("${outdir}/mtag_output"), trait] }
+        .set { filter_inputs }
+
+    FILTER_GWS(filter_inputs)
 }

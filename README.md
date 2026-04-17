@@ -1,11 +1,8 @@
-Nextflow MTAG wrapper
+## Nextflow MTAG wrapper
 
 This repository provides a Nextflow skeleton to run pairwise MTAG between an inflammation GWAS and multiple brain GWAS.
 
-Files created:
-- `main.nf` — pipeline entrypoint (DSL2) and minimal workflow that calls `modules/hello`.
-- `nextflow.config` — minimal profiles (standard, docker).
-- `modules/hello/hello.nf` — example module and process.
+
 
 Quick start
 1. Clone mtag github repository https://github.com/JonJala/mtag
@@ -25,3 +22,4 @@ nextflow run main.nf \
     --mtag_dir /home/law22/data/LIV/MTAG/mtag
 ```
 
+For each MTAG run (1 run per pair) results will be collected in a subdirectory. 
