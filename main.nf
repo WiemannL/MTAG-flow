@@ -13,7 +13,7 @@ params.a1  = "A1"
 params.a2  = "A2"
 params.z   = "Z"
 params.n   = "N"
-params.maf_min = 0.01
+params.maf_min = 0
 
 log.info """\
 MTAG-flow - Pairwise MTAG Pipeline
@@ -36,12 +36,14 @@ Channel
     .map { row -> row.collectEntries { k,v -> [(k.trim()): v?.trim()] } }
     .map { row ->
         def brain_name = row.brain_gwas.tokenize('/').last().replace('.txt','')
-        def brain_trait = row.brain_trait ?: brain_name
+        def raw_trait  = row.brain_trait ?: brain_name
+        // If brain_trait is an absolute path, extract just the filename stem
+        def brain_trait = raw_trait.tokenize('/').last().replace('.txt','')
+        def infl_name  = row.inflammation_gwas.tokenize('/').last().replace('.txt','').replace('_processedGRCh38_clean','').replace('_processedGRCh38_N','').replace('_processedGRCh38','')
         tuple(
             row.inflammation_gwas,
             row.brain_gwas,
-            brain_trait,
-            "${params.outdir}/${brain_trait}_MTAG"
+            "${infl_name}_${brain_trait}"
         )
     }
     .set { pairwise_inputs }
@@ -54,13 +56,13 @@ process RUN_MTAG {
     tag { brain_trait }
 
     input:
-    tuple val(infl_gwas), val(brain_gwas), val(brain_trait), val(outdir)
+    tuple val(infl_gwas), val(brain_gwas), val(brain_trait)
 
     output:
     path "mtag_output"
 
     errorStrategy 'ignore'
-    publishDir "${outdir}", mode: 'copy'
+    publishDir "${params.outdir}/${brain_trait}_MTAG", mode: 'copy'
 
     script:
     """
@@ -83,44 +85,63 @@ process RUN_MTAG {
 // ----------------------
 // FILTER GWAS process
 // ----------------------
-process FILTER_GWS {
-    tag { trait }
+//process FILTER_GWS {
+  //  tag { trait }
+    //conda "/home/law22/data/conda_envs/mtag"
 
-    input:
-    path mtag_dir, emit: mtag_output_dir
-    val trait
+   // input:
+    //path mtag_dir
+    //val trait
+    //val infl_name
 
-    output:
-    path "*.GWS.txt"
-    path "*.GWS.clump.tsv"
+    //output:
+    //path "*.GWS.txt"
+    //path "*.GWS.clump.tsv"
 
-    publishDir "${params.outdir}/${trait}_MTAG", mode: 'copy'
+    //publishDir "${params.outdir}/${trait}_MTAG", mode: 'copy'
 
-    script:
-    """
-    # Find the formatted file (assume convention: <trait>_phenotype_formatted.txt)
-    mtagfile=\$(find \${mtag_dir} -name "*_phenotype_formatted.txt" | head -n1)
-    if [[ -f "\$mtagfile" ]]; then
-        bin/filter_gwas_gws.py \$mtagfile --out_prefix \${trait}
-    else
-        echo "ERROR: No *_phenotype_formatted.txt file found in \${mtag_dir}" >&2
-        exit 1
-    fi
-    """
-}
+    //script:
+    //"""
+    
+    //# Rename and reformat trait_1 (inflammation) and trait_2 (brain)
+    //for f in ${mtag_dir}/*_trait_1.txt; do
+     //   base=\$(basename \$f _trait_1.txt)
+       // out="${infl_name}_MTAG.txt"
+        //awk 'BEGIN{OFS="\\t"} NR==1{print "SNP","CHR","BP","A1","A2","Z","N","FRQ","BETA","SE","P"} NR>1{print \$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$12}' \$f > \$out
+    //done
+
+    //for f in ${mtag_dir}/*_trait_2.txt; do
+      //  out="${trait}_MTAG.txt"
+       // awk 'BEGIN{OFS="\\t"} NR==1{print "SNP","CHR","BP","A1","A2","Z","N","FRQ","BETA","SE","P"} NR>1{print \$1,\$2,\$3,\$4,\$5,\$6,\$7,\$8,\$9,\$10,\$12}' \$f > \$out
+    //done
+
+//# Filter for GWS hits on brain trait
+  //  mtagfile="${trait}_MTAG.txt"
+    //if [[ -f "\$mtagfile" ]]; then
+      //  /home/law22/data/conda_envs/mtag/bin/python ${projectDir}/bin/filter_gwas.py \$mtagfile --out_prefix ${trait}
+    //else
+      //  echo "ERROR: \$mtagfile not found" >&2
+       // exit 1
+    //fi
+   // """
+//}
 
 // ----------------------
 // Workflow definition
 // ----------------------
 workflow {
-    // Run MTAG for each pair
     RUN_MTAG(pairwise_inputs)
 
-    // Filter significant loci for each MTAG output
-    // Passes "mtag_output" dir and trait to the filter process
-    pairwise_inputs
-        .map { infl, brain, trait, outdir -> [file("${outdir}/mtag_output"), trait] }
+    RUN_MTAG.out
+        .merge(pairwise_inputs.map { infl, brain, trait ->
+            def infl_name = infl.tokenize('/').last().replace('.txt','')
+            [trait, infl_name]
+        })
         .set { filter_inputs }
 
-    FILTER_GWS(filter_inputs)
+  //  FILTER_GWS(
+    //    filter_inputs.map { dir, trait, infl -> dir },
+      //  filter_inputs.map { dir, trait, infl -> trait },
+        //filter_inputs.map { dir, trait, infl -> infl }
+    //)
 }
